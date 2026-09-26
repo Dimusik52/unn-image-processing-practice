@@ -30,6 +30,13 @@ def add_salt_pepper_noise(image, amount=0.05):
 
     return noisy_image
 
+def add_uniform_noise(image, low=0, high=50):
+    """Apply uniform noise"""
+    noise = np.zeros(image.shape, np.uint8)
+    cv2.randu(noise, low, high)
+    noisy_image = cv2.add(image, noise)
+    return noisy_image
+
 def compare_filters(original, noisy, filters_dict):
     print(f"{'Filter':<25} | {'MSE':<10} | {'SSIM':<8}")
     print('-' * 50)
@@ -104,6 +111,34 @@ compare_filters(image_gray, noisy_sp, filters_sp)
 showpic(image_gray, 'Original')
 showpic(noisy_sp, 'Salt and Pepper')
 for name, pic in filters_sp.items():
+    showpic(pic, f"{name}")
+
+#
+
+# UNIFORM
+
+noisy_uniform = add_uniform_noise(image_gray, low=0, high=100)
+
+denoised_uni_median = cv2.medianBlur(noisy_uniform, 5)
+denoised_uni_gaussian = cv2.GaussianBlur(noisy_uniform, (5, 5), 0)
+denoised_uni_bilateral = cv2.bilateralFilter(noisy_uniform, 9, 75, 75)
+denoised_uni_nlm_10 = cv2.fastNlMeansDenoising(noisy_uniform, h=10)
+denoised_uni_nlm_25 = cv2.fastNlMeansDenoising(noisy_uniform, h=25)
+denoised_uni_nlm_50 = cv2.fastNlMeansDenoising(noisy_uniform, h=50)
+
+filters_uni = {
+    "Median": denoised_uni_median,
+    "Gauss Filter": denoised_uni_gaussian,
+    "Bilateral": denoised_uni_bilateral,
+    "NLM h=10": denoised_uni_nlm_10,
+    "NLM h=25": denoised_uni_nlm_25,
+    "NLM h=50": denoised_uni_nlm_50
+}
+
+compare_filters(image_gray, noisy_uniform, filters_uni)
+showpic(image_gray, 'Original')
+showpic(noisy_uniform, 'Uniform')
+for name, pic in filters_uni.items():
     showpic(pic, f"{name}")
 
 #
