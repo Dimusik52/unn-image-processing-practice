@@ -104,69 +104,43 @@ plt.tight_layout(); plt.show()
 #
 
 # 3
-def find_spectrum_peaks(dft_shift, top_n=4, exclude_radius=20):
-    mag = cv.magnitude(dft_shift[:, :, 0], dft_shift[:, :, 1])
-    rows, cols = mag.shape
-    cx, cy = rows // 2, cols // 2
-
-    yy, xx = np.mgrid[0:rows, 0:cols]
-    dist2 = (xx - cx) ** 2 + (yy - cy) ** 2
-    mag_work = mag.copy()
-    mag_work[dist2 <= exclude_radius ** 2] = 0
-
-    flat_idx = np.argsort(mag_work.ravel())[::-1]
-    peaks = []
-    min_dist = 10
-    for idx in flat_idx:
-        if len(peaks) >= top_n:
-            break
-        py, px = np.unravel_index(idx, mag_work.shape)
-        if all((px - qx) ** 2 + (py - qy) ** 2 > min_dist ** 2 for qx, qy in peaks):
-            peaks.append((px, py))
-    return peaks
-
-
-def notch_filter(dft_shift, centers, radius):
-    out = dft_shift.copy()
-    rows, cols = out.shape[:2]
-    cx, cy = rows // 2, cols // 2
-    yy, xx = np.mgrid[0:rows, 0:cols]
-    for (px, py) in centers:
-        for (sx, sy) in [(px, py), (2 * cx - px, 2 * cy - py)]:
-            d2 = (xx - sx) ** 2 + (yy - sy) ** 2
-            out[d2 <= radius ** 2] = 0
-    return out
-
+from skimage.feature import peak_local_max
 
 noisy = cv.imread('source/periodic_noise.jpg', cv.IMREAD_GRAYSCALE)
 showpic(noisy, 'Noisy input')
 
 dft_noisy = cv.dft(np.float32(noisy), flags=cv.DFT_COMPLEX_OUTPUT)
-dft_noisy_shift = np.fft.fftshift(dft_noisy)
-showpic(magnitude_log(dft_noisy_shift), 'Noisy spectrum')
+dft_shift = np.fft.fftshift(dft_noisy)
 
-# Находим пики и отбираем
-peaks = find_spectrum_peaks(dft_noisy_shift, top_n=12, exclude_radius=50)
-print("Found peaks:", peaks)
-#
+magnitude_spectrum = 20 * np.log(cv.magnitude(dft_shift[:, :, 0], dft_shift[:, :, 1]) + 1)
+showpic(magnitude_spectrum, 'Noisy spectrum (log)')
 
-peaks = [
-    (393, 297), (216, 297),
-    (518, 172), (518, 422),
-    (393, 120), (393, 474),
-]
-NOTCH_RADIUS = 6
+rows, cols = noisy.shape
 
-dft_notched = notch_filter(dft_noisy_shift, peaks, NOTCH_RADIUS)
-showpic(magnitude_log(dft_notched), 'Spectrum after notch filter')
+local_max = peak_local_max(magnitude_spectrum, min_distance=15, threshold_abs=200)
+print(f"Found peaks: {len(local_max)}")
+print("Coords (y, x):", local_max)
 
-f_ishift = np.fft.ifftshift(dft_notched)
-img_back = cv.idft(f_ishift)
-img_clean = cv.magnitude(img_back[:, :, 0], img_back[:, :, 1])
+mask = np.ones((rows, cols, 2), dtype=np.uint8)
+center_x, center_y = rows // 2, cols // 2
+
+for peak in local_max:
+    y, x = peak
+    distance = np.sqrt((x - center_y) ** 2 + (y - center_x) ** 2)
+    if distance > 40:
+        cv.circle(mask, (x, y), 5, (0, 0), -1)
+
+dft_shift = dft_shift * mask
+
+filtered_spectrum = 20 * np.log(cv.magnitude(dft_shift[:, :, 0], dft_shift[:, :, 1]) + 1)
+showpic(filtered_spectrum, 'Spectrum after notch')
+
+img_idft = cv.idft(np.fft.ifftshift(dft_shift))
+img_clean = cv.magnitude(img_idft[:, :, 0], img_idft[:, :, 1])
 
 plt.figure(figsize=(12, 4))
 plt.subplot(1, 3, 1); plt.imshow(noisy, cmap='gray'); plt.title('Noisy input'); plt.axis('off')
-plt.subplot(1, 3, 2); plt.imshow(magnitude_log(dft_notched), cmap='gray'); plt.title('Notched spectrum'); plt.axis('off')
+plt.subplot(1, 3, 2); plt.imshow(filtered_spectrum, cmap='gray'); plt.title('Notched spectrum'); plt.axis('off')
 plt.subplot(1, 3, 3); plt.imshow(img_clean, cmap='gray'); plt.title('Denoised'); plt.axis('off')
 plt.tight_layout(); plt.show()
 #
